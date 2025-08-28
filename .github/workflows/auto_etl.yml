@@ -1,1 +1,73 @@
+name: Auto ETL Clean Master Table
 
+on:
+  schedule:
+    # Runs every day at 3 AM UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch: # allows manual trigger
+
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client curl
+
+      - name: Download CSV from Supabase
+        run: |
+          curl -L "https://ofhmnjwqngmpgnktqeyt.supabase.co/storage/v1/object/sign/csv_uploads1/clean_mastertable.csv?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8xZDljMGVlNS0yOWRiLTQ0Y2ItYmIwNy1hMTY5NTZhNjc1YzEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJjc3ZfdXBsb2FkczEvY2xlYW5fbWFzdGVydGFibGUuY3N2IiwiaWF0IjoxNzU2MzczODEwLCJleHAiOjIwNzE3MzM4MTB9.tfdfFNmxzn9-tnnn7M_cN-87VRFyXmKsbGOdzRIEP_8" -o clean_mastertable.csv
+
+      - name: Run ETL SQL
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" <<EOF
+          -- Step 1: Clear staging table
+          TRUNCATE staging_mastertable;
+
+          -- Step 2: Load CSV into staging
+          \copy staging_mastertable FROM 'clean_mastertable.csv' CSV HEADER DELIMITER ',';
+
+          -- Step 3: Transform and insert into Clean_mastertable
+          INSERT INTO Clean_mastertable (
+            cohort_code, size_clean, start_date, start_time, end_date, end_time,
+            learner_id, country, degree, institution, major, enrollment_id,
+            learner_id_dup, assigned_cohort, apply_date, status,
+            opportunity_id, opportunity_name, category, opportunity_code,
+            tracking_questions,
+            imputed_cohort_code, size_clean_num, imputed_size_clean, imputed_degree,
+            imputed_institution, imputed_major
+          )
+          SELECT
+            NULLIF(cohort_code,'')::varchar,
+            NULLIF(size_clean,'')::integer,
+            NULLIF(start_date_clean_date,'')::date,
+            NULLIF(start_date_clean_time,'')::time,
+            NULLIF(end_date_clean_date,'')::date,
+            NULLIF(end_date_clean_time,'')::time,
+            NULLIF(learner_id,'')::varchar,
+            NULLIF(country,'')::varchar,
+            NULLIF(degree,'')::varchar,
+            NULLIF(institution,'')::varchar,
+            NULLIF(major,'')::varchar,
+            NULLIF(enrollment_id,'')::varchar,
+            NULLIF(learner_id_dup,'')::varchar,
+            NULLIF(assigned_cohort,'')::varchar,
+            NULLIF(apply_date,'')::date,
+            NULLIF(status,'')::integer,
+            NULLIF(opportunity_id,'')::text,
+            NULLIF(opportunity_name,'')::text,
+            NULLIF(category,'')::varchar,
+            NULLIF(opportunity_code,'')::varchar,
+            CASE WHEN NULLIF(tracking_questions,'') IS NULL THEN '{}'::jsonb ELSE (tracking_questions::jsonb) END,
+            CASE WHEN lower(COALESCE(imputed_cohort_code,'')) IN ('true','t','1') THEN true ELSE false END,
+            NULLIF(size_clean_num,'')::numeric,
+            CASE WHEN lower(COALESCE(imputed_size_clean,'')) IN ('true','t','1') THEN true ELSE false END,
+            CASE WHEN lower(COALESCE(imputed_degree,'')) IN ('true','t','1') THEN true ELSE false END,
+            CASE WHEN lower(COALESCE(imputed_institution,'')) IN ('true','t','1') THEN true ELSE false END,
+            CASE WHEN lower(COALESCE(imputed_major,'')) IN ('true','t','1') THEN true ELSE false END
+          FROM staging_mastertable;
+          EOF
