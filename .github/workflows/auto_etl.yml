@@ -24,13 +24,14 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           echo "Testing connection..."
-          psql "$SUPABASE_DB_URL" -c "\conninfo"
+          # Connection test without quotes to avoid SSL parsing issues
+          psql $SUPABASE_DB_URL -c "\conninfo"
 
       - name: Run ETL SQL
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          psql "$SUPABASE_DB_URL" <<EOF
+          psql $SUPABASE_DB_URL <<EOF
           -- Step 1: Clear staging table
           TRUNCATE staging_mastertable;
 
