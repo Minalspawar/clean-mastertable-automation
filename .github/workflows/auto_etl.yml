@@ -1,11 +1,10 @@
-
 name: Auto ETL Clean Master Table
 
 on:
   schedule:
-    - cron: "0 3 * * *"  # runs every day at 3 AM UTC
-  workflow_dispatch:      # allows manual trigger
-  
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
 jobs:
   etl:
     runs-on: ubuntu-latest
@@ -25,13 +24,8 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           psql "$SUPABASE_DB_URL" <<EOF
-          -- Step 1: Clear staging table
           TRUNCATE staging_mastertable;
-
-          -- Step 2: Load CSV into staging
           \copy staging_mastertable FROM 'clean_mastertable.csv' CSV HEADER DELIMITER ',';
-
-          -- Step 3: Transform and insert into Clean_mastertable
           INSERT INTO Clean_mastertable (
             cohort_code, size_clean, start_date, start_time, end_date, end_time,
             learner_id, country, degree, institution, major, enrollment_id,
