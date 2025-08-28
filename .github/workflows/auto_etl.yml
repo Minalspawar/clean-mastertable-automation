@@ -2,8 +2,8 @@ name: Auto ETL Clean Master Table
 
 on:
   schedule:
-    - cron: "0 3 * * *"
-  workflow_dispatch:
+    - cron: "0 3 * * *"  # Runs every day at 3 AM UTC
+  workflow_dispatch:      # Allows manual trigger
 
 jobs:
   etl:
@@ -19,13 +19,25 @@ jobs:
         run: |
           curl -L "https://ofhmnjwqngmpgnktqeyt.supabase.co/storage/v1/object/sign/csv_uploads1/clean_mastertable.csv?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8xZDljMGVlNS0yOWRiLTQ0Y2ItYmIwNy1hMTY5NTZhNjc1YzEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJjc3ZfdXBsb2FkczEvY2xlYW5fbWFzdGVydGFibGUuY3N2IiwiaWF0IjoxNzU2MzczODEwLCJleHAiOjIwNzE3MzM4MTB9.tfdfFNmxzn9-tnnn7M_cN-87VRFyXmKsbGOdzRIEP_8" -o clean_mastertable.csv
 
+      - name: Test Supabase connection
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "Testing connection..."
+          psql "$SUPABASE_DB_URL" -c "\conninfo"
+
       - name: Run ETL SQL
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           psql "$SUPABASE_DB_URL" <<EOF
+          -- Step 1: Clear staging table
           TRUNCATE staging_mastertable;
+
+          -- Step 2: Load CSV into staging
           \copy staging_mastertable FROM 'clean_mastertable.csv' CSV HEADER DELIMITER ',';
+
+          -- Step 3: Transform and insert into Clean_mastertable
           INSERT INTO Clean_mastertable (
             cohort_code, size_clean, start_date, start_time, end_date, end_time,
             learner_id, country, degree, institution, major, enrollment_id,
